@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>Mes Dépenses</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>Mes Dépenses</h1>
+    <p class="subtitle">Suivi quotidien</p>
+  </header>
+
+  <main>
+    <div id="storageBanner" class="storage-banner hidden"></div>
+    <div id="exportReminder" class="storage-banner hidden"></div>
+
+    <section class="month-bar">
+      <label class="month-label">
+        <span>Mois affiché</span>
+        <input type="month" id="monthPicker" />
+      </label>
+    </section>
+
+    <section class="summary-block summary-familial">
+      <h2 class="block-title">👪 Budget familial</h2>
+      <div class="card card-balance balance-familial">
+        <span class="label">Solde restant familial</span>
+        <span id="balanceFamilial" class="amount">0 FCFA</span>
+      </div>
+      <div class="summary-row">
+        <div class="card card-mini">
+          <span class="label">Revenus</span>
+          <span id="incomeFamilial" class="amount-mini income">0 FCFA</span>
+        </div>
+        <div class="card card-mini">
+          <span class="label">Dépenses</span>
+          <span id="expenseFamilial" class="amount-mini expense">0 FCFA</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="summary-block summary-personal">
+      <h2 class="block-title">👤 Budget personnel</h2>
+      <div class="card card-balance balance-personal">
+        <span class="label">Solde restant personnel</span>
+        <span id="balancePersonal" class="amount">0 FCFA</span>
+      </div>
+      <div class="summary-row">
+        <div class="card card-mini">
+          <span class="label">Revenus</span>
+          <span id="incomePersonal" class="amount-mini income">0 FCFA</span>
+        </div>
+        <div class="card card-mini">
+          <span class="label">Dépenses</span>
+          <span id="expensePersonal" class="amount-mini expense">0 FCFA</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="tabs">
+      <button class="tab-btn active" data-tab="add">Ajouter</button>
+      <button class="tab-btn" data-tab="history">Historique</button>
+    </section>
+
+    <section id="tab-add" class="tab-content active">
+      <form id="entryForm">
+        <div class="type-toggle">
+          <label>
+            <input type="radio" name="type" value="income" checked />
+            <span>Revenu</span>
+          </label>
+          <label>
+            <input type="radio" name="type" value="expense" />
+            <span>Dépense</span>
+          </label>
+        </div>
+
+        <div id="scopeField" class="scope-toggle">
+          <label>
+            <input type="radio" name="scope" value="familiale" checked />
+            <span>👪 Familiale</span>
+          </label>
+          <label>
+            <input type="radio" name="scope" value="personnelle" />
+            <span>👤 Personnelle</span>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Description</span>
+          <input type="text" id="description" placeholder="Ex : Salaire, Courses..." required />
+        </label>
+
+        <label class="field">
+          <span>Catégorie</span>
+          <select id="category">
+            <option value="Général">Général</option>
+            <option value="Alimentation">Alimentation</option>
+            <option value="Transport">Transport</option>
+            <option value="Logement">Logement</option>
+            <option value="Loisirs">Loisirs</option>
+            <option value="Santé">Santé</option>
+            <option value="Salaire">Salaire</option>
+            <option value="Autre">Autre</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Montant (FCFA)</span>
+          <input type="number" id="amount" step="1" min="0" placeholder="0" required inputmode="numeric" />
+        </label>
+
+        <label class="field">
+          <span>Date</span>
+          <input type="date" id="date" required />
+        </label>
+
+        <button type="submit" class="btn-primary">Enregistrer</button>
+      </form>
+    </section>
+
+    <section id="tab-history" class="tab-content">
+      <div class="filter-bar">
+        <select id="filterType">
+          <option value="all">Tous</option>
+          <option value="familiale">👪 Familial (tout)</option>
+          <option value="personnelle">👤 Personnel (tout)</option>
+          <option value="income-familiale">Revenus familiaux</option>
+          <option value="income-personnelle">Revenus personnels</option>
+          <option value="expense-familiale">Dépenses familiales</option>
+          <option value="expense-personnelle">Dépenses personnelles</option>
+        </select>
+      </div>
+      <ul id="entriesList" class="entries"></ul>
+      <p id="emptyState" class="empty">Aucune entrée pour ce mois.</p>
+
+      <div class="data-section">
+        <h2 class="section-title">Sauvegarde des données</h2>
+        <p class="section-help">Exportez vos données en fichier pour les conserver ou les transférer sur un autre téléphone.</p>
+        <div class="data-buttons">
+          <button id="exportBtn" class="btn-secondary">Exporter (.json)</button>
+          <button id="importBtn" class="btn-secondary">Importer un fichier</button>
+          <input type="file" id="importInput" accept=".json,application/json" hidden />
+          <button id="clearAll" class="btn-danger">Tout effacer</button>
+        </div>
+        <p id="dataMessage" class="data-message"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
