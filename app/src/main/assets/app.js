@@ -37,7 +37,8 @@ const incomePersonalEl = document.getElementById('incomePersonal');
 const expensePersonalEl = document.getElementById('expensePersonal');
 const balancePersonalEl = document.getElementById('balancePersonal');
 const exportBtn = document.getElementById('exportBtn');
-const exportPdfBtn = document.getElementById('exportPdfBtn');
+const exportPdfFamilialBtn = document.getElementById('exportPdfFamilialBtn');
+const exportPdfPersonalBtn = document.getElementById('exportPdfPersonalBtn');
 const importBtn = document.getElementById('importBtn');
 const importInput = document.getElementById('importInput');
 const dataMessage = document.getElementById('dataMessage');
@@ -158,17 +159,20 @@ exportBtn.addEventListener('click', () => {
   showMessage(`${entries.length} entrée(s) exportée(s).`, 'success');
 });
 
-// === EXPORT PDF ===
-exportPdfBtn.addEventListener('click', exportPdf);
+// === EXPORT PDF (par budget) ===
+exportPdfFamilialBtn.addEventListener('click', () => exportPdf('familiale'));
+exportPdfPersonalBtn.addEventListener('click', () => exportPdf('personnelle'));
 
-function exportPdf() {
+function exportPdf(scope) {
   if (!window.jspdf || !window.jspdf.jsPDF) {
     showMessage('Bibliothèque PDF non chargée.', 'error');
     return;
   }
-  const monthEntries = getSelectedMonthEntries();
+  const monthEntries = getSelectedMonthEntries().filter((e) => e.scope === scope);
+  const scopeLabel = scope === 'familiale' ? 'Budget familial' : 'Budget personnel';
+  const scopeShort = scope === 'familiale' ? 'familial' : 'personnel';
   if (monthEntries.length === 0) {
-    showMessage('Aucune donnée pour ce mois.', 'error');
+    showMessage('Aucune donnée ' + scopeShort + 'e pour ce mois.', 'error');
     return;
   }
 
@@ -188,25 +192,17 @@ function exportPdf() {
   doc.text('Mes Dépenses', pageWidth / 2, 14, { align: 'center' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(12);
-  doc.text('Rapport mensuel — ' + capitalize(monthLabel), pageWidth / 2, 23, { align: 'center' });
+  doc.text(scopeLabel + ' — ' + capitalize(monthLabel), pageWidth / 2, 23, { align: 'center' });
 
-  // === Calculs ===
-  const sumFilter = (filter) =>
-    monthEntries.filter(filter).reduce((s, e) => s + e.amount, 0);
-  const incomeFamilial = sumFilter((e) => e.type === 'income' && e.scope === 'familiale');
-  const expenseFamilial = sumFilter((e) => e.type === 'expense' && e.scope === 'familiale');
-  const balanceFamilial = incomeFamilial - expenseFamilial;
-  const incomePersonal = sumFilter((e) => e.type === 'income' && e.scope === 'personnelle');
-  const expensePersonal = sumFilter((e) => e.type === 'expense' && e.scope === 'personnelle');
-  const balancePersonal = incomePersonal - expensePersonal;
+  // === Calculs (scope unique) ===
+  const income = monthEntries.filter((e) => e.type === 'income').reduce((s, e) => s + e.amount, 0);
+  const expense = monthEntries.filter((e) => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
+  const balance = income - expense;
 
-  // === Blocs récapitulatifs ===
+  // === Bloc récapitulatif (pleine largeur) ===
   let y = 40;
-  drawBudgetBox(doc, 12, y, (pageWidth - 30) / 2, 38,
-      'Budget familial', incomeFamilial, expenseFamilial, balanceFamilial);
-  drawBudgetBox(doc, 12 + (pageWidth - 30) / 2 + 6, y, (pageWidth - 30) / 2, 38,
-      'Budget personnel', incomePersonal, expensePersonal, balancePersonal);
-  y += 46;
+  drawBudgetBox(doc, 12, y, pageWidth - 24, 44, scopeLabel, income, expense, balance);
+  y += 52;
 
   // === Titre du tableau ===
   doc.setTextColor(15, 23, 42);
@@ -215,32 +211,41 @@ function exportPdf() {
   doc.text('Détail des opérations', 12, y);
   y += 4;
 
-  // === Tableau ===
+  // === Tableau (5 colonnes, plus aéré) ===
   const sorted = monthEntries.slice().sort(
       (a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   const rows = sorted.map((e) => [
     dateFormatter.format(new Date(e.date)),
     e.description,
     e.category,
-    e.scope === 'familiale' ? 'Familial' : 'Personnel',
     e.type === 'income' ? 'Revenu' : 'Dépense',
-    (e.type === 'income' ? '+ ' : '- ') + formatter.format(e.amount),
+    (e.type === 'income' ? '+ ' : '- ') + formatAmountForPdf(e.amount),
   ]);
 
   doc.autoTable({
     startY: y,
-    head: [['Date', 'Description', 'Catégorie', 'Budget', 'Type', 'Montant']],
+    head: [['Date', 'Description', 'Catégorie', 'Type', 'Montant']],
     body: rows,
     margin: { left: 12, right: 12 },
-    styles: { fontSize: 9, cellPadding: 2.5, lineColor: [226, 232, 240], lineWidth: 0.2 },
+    styles: {
+      fontSize: 9,
+      cellPadding: 2.5,
+      lineColor: [226, 232, 240],
+      lineWidth: 0.2,
+      overflow: 'linebreak',
+      valign: 'middle',
+    },
     headStyles: { fillColor: [15, 118, 110], textColor: 255, halign: 'left' },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     columnStyles: {
-      5: { halign: 'right', fontStyle: 'bold' },
+      0: { cellWidth: 28 },
+      2: { cellWidth: 32 },
+      3: { cellWidth: 22 },
+      4: { halign: 'right', fontStyle: 'bold', cellWidth: 38 },
     },
     didParseCell: (data) => {
-      if (data.section === 'body' && data.column.index === 5) {
-        const isIncome = data.row.raw[4] === 'Revenu';
+      if (data.section === 'body' && data.column.index === 4) {
+        const isIncome = data.row.raw[3] === 'Revenu';
         data.cell.styles.textColor = isIncome ? [22, 163, 74] : [220, 38, 38];
       }
     },
@@ -259,9 +264,8 @@ function exportPdf() {
   }
 
   // === Enregistrement ===
-  const filename = `mes-depenses-${monthPicker.value}.pdf`;
+  const filename = `mes-depenses-${scopeShort}-${monthPicker.value}.pdf`;
   if (window.AndroidApp && typeof window.AndroidApp.savePdf === 'function') {
-    // Application native : envoi du PDF en base64 au pont Android
     const blob = doc.output('blob');
     const reader = new FileReader();
     reader.onload = () => {
@@ -276,7 +280,6 @@ function exportPdf() {
     reader.onerror = () => showMessage('Erreur de conversion du PDF.', 'error');
     reader.readAsDataURL(blob);
   } else {
-    // Version web : téléchargement direct
     doc.save(filename);
     showMessage('PDF téléchargé.', 'success');
   }
@@ -289,34 +292,43 @@ function drawBudgetBox(doc, x, y, w, h, title, income, expense, balance) {
   doc.roundedRect(x, y, w, h, 3, 3, 'FD');
   // Titre
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(13);
   doc.setTextColor(15, 23, 42);
-  doc.text(title, x + 4, y + 6);
+  doc.text(title, x + 5, y + 8);
   // Lignes
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
-  doc.text('Revenus', x + 4, y + 14);
-  doc.text('Dépenses', x + 4, y + 21);
-  doc.text('Solde', x + 4, y + 32);
+  doc.text('Revenus', x + 5, y + 18);
+  doc.text('Dépenses', x + 5, y + 26);
+  doc.text('Solde', x + 5, y + 38);
   // Montants
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setTextColor(22, 163, 74);
-  doc.text(formatter.format(income), x + w - 4, y + 14, { align: 'right' });
+  doc.text(formatAmountForPdf(income), x + w - 5, y + 18, { align: 'right' });
   doc.setTextColor(220, 38, 38);
-  doc.text(formatter.format(expense), x + w - 4, y + 21, { align: 'right' });
+  doc.text(formatAmountForPdf(expense), x + w - 5, y + 26, { align: 'right' });
   // Séparateur
   doc.setDrawColor(226, 232, 240);
-  doc.line(x + 4, y + 25, x + w - 4, y + 25);
+  doc.line(x + 5, y + 30, x + w - 5, y + 30);
   // Solde mis en évidence
-  doc.setFontSize(12);
+  doc.setFontSize(13);
   if (balance >= 0) {
     doc.setTextColor(22, 163, 74);
   } else {
     doc.setTextColor(220, 38, 38);
   }
-  doc.text(formatter.format(balance), x + w - 4, y + 32, { align: 'right' });
+  doc.text(formatAmountForPdf(balance), x + w - 5, y + 38, { align: 'right' });
+}
+
+function formatAmountForPdf(amount) {
+  // Formatage manuel pour éviter les caractères qu'Helvetica de jsPDF
+  // ne rend pas correctement (espace insécable étroit U+202F produit par
+  // Intl.NumberFormat pour XOF).
+  const rounded = Math.round(Math.abs(amount)).toString();
+  const withSep = rounded.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return withSep + ' CFA';
 }
 
 function capitalize(s) {
