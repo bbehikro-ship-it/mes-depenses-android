@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -140,6 +141,44 @@ public class MainActivity extends Activity {
                         Toast.LENGTH_LONG).show());
 
                 return "Sauvegarde enregistrée dans Téléchargements : " + filename;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        /**
+         * Enregistre un fichier PDF reçu en base64 depuis le JavaScript,
+         * dans le dossier "Téléchargements".
+         */
+        @JavascriptInterface
+        public String savePdf(String filename, String base64Content) {
+            try {
+                byte[] bytes = Base64.decode(base64Content, Base64.DEFAULT);
+
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Downloads.DISPLAY_NAME, filename);
+                values.put(MediaStore.Downloads.MIME_TYPE, "application/pdf");
+                values.put(MediaStore.Downloads.RELATIVE_PATH,
+                        Environment.DIRECTORY_DOWNLOADS);
+
+                Uri uri = getContentResolver().insert(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (uri == null) {
+                    return null;
+                }
+
+                OutputStream os = getContentResolver().openOutputStream(uri);
+                if (os == null) {
+                    return null;
+                }
+                os.write(bytes);
+                os.close();
+
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "PDF enregistré dans le dossier Téléchargements",
+                        Toast.LENGTH_LONG).show());
+
+                return "PDF enregistré : " + filename;
             } catch (Exception e) {
                 return null;
             }

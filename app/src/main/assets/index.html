@@ -141,6 +141,14 @@
       <p id="emptyState" class="empty">Aucune entrée pour ce mois.</p>
 
       <div class="data-section">
+        <h2 class="section-title">Rapport PDF du mois</h2>
+        <p class="section-help">Génère un rapport PDF élégant du mois affiché — idéal pour imprimer ou partager.</p>
+        <div class="data-buttons">
+          <button id="exportPdfBtn" class="btn-primary">📄 Télécharger en PDF</button>
+        </div>
+      </div>
+
+      <div class="data-section">
         <h2 class="section-title">Sauvegarde des données</h2>
         <p class="section-help">Exportez vos données en fichier pour les conserver ou les transférer sur un autre téléphone.</p>
         <div class="data-buttons">
@@ -154,6 +162,8 @@
     </section>
   </main>
 
+  <script src="jspdf.umd.min.js"></script>
+  <script src="jspdf.plugin.autotable.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

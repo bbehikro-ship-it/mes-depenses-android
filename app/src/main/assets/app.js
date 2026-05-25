@@ -37,6 +37,7 @@ const incomePersonalEl = document.getElementById('incomePersonal');
 const expensePersonalEl = document.getElementById('expensePersonal');
 const balancePersonalEl = document.getElementById('balancePersonal');
 const exportBtn = document.getElementById('exportBtn');
+const exportPdfBtn = document.getElementById('exportPdfBtn');
 const importBtn = document.getElementById('importBtn');
 const importInput = document.getElementById('importInput');
 const dataMessage = document.getElementById('dataMessage');
@@ -156,6 +157,171 @@ exportBtn.addEventListener('click', () => {
   checkExportReminder();
   showMessage(`${entries.length} entrée(s) exportée(s).`, 'success');
 });
+
+// === EXPORT PDF ===
+exportPdfBtn.addEventListener('click', exportPdf);
+
+function exportPdf() {
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    showMessage('Bibliothèque PDF non chargée.', 'error');
+    return;
+  }
+  const monthEntries = getSelectedMonthEntries();
+  if (monthEntries.length === 0) {
+    showMessage('Aucune donnée pour ce mois.', 'error');
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  const monthLabel = monthFormatter.format(new Date(monthPicker.value + '-01'));
+
+  // === En-tête coloré ===
+  doc.setFillColor(15, 118, 110);
+  doc.rect(0, 0, pageWidth, 30, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.text('Mes Dépenses', pageWidth / 2, 14, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(12);
+  doc.text('Rapport mensuel — ' + capitalize(monthLabel), pageWidth / 2, 23, { align: 'center' });
+
+  // === Calculs ===
+  const sumFilter = (filter) =>
+    monthEntries.filter(filter).reduce((s, e) => s + e.amount, 0);
+  const incomeFamilial = sumFilter((e) => e.type === 'income' && e.scope === 'familiale');
+  const expenseFamilial = sumFilter((e) => e.type === 'expense' && e.scope === 'familiale');
+  const balanceFamilial = incomeFamilial - expenseFamilial;
+  const incomePersonal = sumFilter((e) => e.type === 'income' && e.scope === 'personnelle');
+  const expensePersonal = sumFilter((e) => e.type === 'expense' && e.scope === 'personnelle');
+  const balancePersonal = incomePersonal - expensePersonal;
+
+  // === Blocs récapitulatifs ===
+  let y = 40;
+  drawBudgetBox(doc, 12, y, (pageWidth - 30) / 2, 38,
+      'Budget familial', incomeFamilial, expenseFamilial, balanceFamilial);
+  drawBudgetBox(doc, 12 + (pageWidth - 30) / 2 + 6, y, (pageWidth - 30) / 2, 38,
+      'Budget personnel', incomePersonal, expensePersonal, balancePersonal);
+  y += 46;
+
+  // === Titre du tableau ===
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('Détail des opérations', 12, y);
+  y += 4;
+
+  // === Tableau ===
+  const sorted = monthEntries.slice().sort(
+      (a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  const rows = sorted.map((e) => [
+    dateFormatter.format(new Date(e.date)),
+    e.description,
+    e.category,
+    e.scope === 'familiale' ? 'Familial' : 'Personnel',
+    e.type === 'income' ? 'Revenu' : 'Dépense',
+    (e.type === 'income' ? '+ ' : '- ') + formatter.format(e.amount),
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Date', 'Description', 'Catégorie', 'Budget', 'Type', 'Montant']],
+    body: rows,
+    margin: { left: 12, right: 12 },
+    styles: { fontSize: 9, cellPadding: 2.5, lineColor: [226, 232, 240], lineWidth: 0.2 },
+    headStyles: { fillColor: [15, 118, 110], textColor: 255, halign: 'left' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      5: { halign: 'right', fontStyle: 'bold' },
+    },
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 5) {
+        const isIncome = data.row.raw[4] === 'Revenu';
+        data.cell.styles.textColor = isIncome ? [22, 163, 74] : [220, 38, 38];
+      }
+    },
+  });
+
+  // === Pied de page ===
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    const now = new Date().toLocaleString('fr-FR');
+    doc.text('Généré le ' + now, 12, pageHeight - 8);
+    doc.text('Page ' + i + ' / ' + pageCount, pageWidth - 12, pageHeight - 8, { align: 'right' });
+  }
+
+  // === Enregistrement ===
+  const filename = `mes-depenses-${monthPicker.value}.pdf`;
+  if (window.AndroidApp && typeof window.AndroidApp.savePdf === 'function') {
+    // Application native : envoi du PDF en base64 au pont Android
+    const blob = doc.output('blob');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = String(reader.result).split(',')[1];
+      try {
+        const result = window.AndroidApp.savePdf(filename, base64);
+        showMessage(result || 'PDF enregistré dans Téléchargements.', 'success');
+      } catch (err) {
+        showMessage('Erreur lors de la sauvegarde du PDF.', 'error');
+      }
+    };
+    reader.onerror = () => showMessage('Erreur de conversion du PDF.', 'error');
+    reader.readAsDataURL(blob);
+  } else {
+    // Version web : téléchargement direct
+    doc.save(filename);
+    showMessage('PDF téléchargé.', 'success');
+  }
+}
+
+function drawBudgetBox(doc, x, y, w, h, title, income, expense, balance) {
+  // Cadre
+  doc.setDrawColor(226, 232, 240);
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(x, y, w, h, 3, 3, 'FD');
+  // Titre
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(15, 23, 42);
+  doc.text(title, x + 4, y + 6);
+  // Lignes
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Revenus', x + 4, y + 14);
+  doc.text('Dépenses', x + 4, y + 21);
+  doc.text('Solde', x + 4, y + 32);
+  // Montants
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(22, 163, 74);
+  doc.text(formatter.format(income), x + w - 4, y + 14, { align: 'right' });
+  doc.setTextColor(220, 38, 38);
+  doc.text(formatter.format(expense), x + w - 4, y + 21, { align: 'right' });
+  // Séparateur
+  doc.setDrawColor(226, 232, 240);
+  doc.line(x + 4, y + 25, x + w - 4, y + 25);
+  // Solde mis en évidence
+  doc.setFontSize(12);
+  if (balance >= 0) {
+    doc.setTextColor(22, 163, 74);
+  } else {
+    doc.setTextColor(220, 38, 38);
+  }
+  doc.text(formatter.format(balance), x + w - 4, y + 32, { align: 'right' });
+}
+
+function capitalize(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
 
 // === IMPORT ===
 importBtn.addEventListener('click', () => importInput.click());
